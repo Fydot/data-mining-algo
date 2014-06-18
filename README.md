@@ -1,4 +1,4 @@
-data-mining-algo
-================
+Data Mining Notes
+===
 
-Data Mining Algorithm
+Some Notes About Data Mining
