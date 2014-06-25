@@ -39,7 +39,7 @@ def gain(data, attribute):
     return entropy(data) - entropy_weight_score / len(data)
 
 
-def select_attribute(data):
+def select_attribute_gain(data):
     if len(data) == 0:
         return None
     attributes = data[0].keys().remove("group")
