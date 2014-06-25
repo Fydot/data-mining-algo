@@ -9,42 +9,51 @@ class Bayes(object):
 
     def learn(self, cls, words):
         for word in words:
-            if not self.storage.exists("%s:%s" % (self.prefix, word.__hash__())):
-                self.storage.incr("%s:words" % self.prefix)
             self.storage.incr("%s:%s:%s" % (self.prefix, cls, word.__hash__()))
-            self.storage.incr("%s:%s" % (self.prefix, word.__hash__()))
         self.storage.incr("%s:%s" % (self.prefix, cls))
-        self.storage.incr("%s:record" % self.prefix)
 
     def classify(self, cls, words):
-        length = int(self.storage.get("%s:words" % self.prefix)) if self.storage.get("%s:words" % self.prefix) else 0
-        cls_word_cnt_power = 1
-        word_cnt_power = 1
+        laplace_cnt = 0
+        cls_word_cnts = []
         for word in words:
-            cls_word_cnt = self.storage.get("%s:%s:%s" % (self.prefix, cls, word.__hash__()))
-            word_cnt = self.storage.get("%s:%s" % (self.prefix, word.__hash__()))
+            value = self.storage.get("%s:%s:%s" % (self.prefix, cls, word.__hash__()))
+            if value:
+                cls_word_cnts.append(int(value))
+            else:
+                laplace_cnt += 1
+                cls_word_cnts.append(1)
+        cls_cnt = int(self.storage.get("%s:%s" % (self.prefix, cls)) or 0) + laplace_cnt
 
-            cls_word_cnt_power *= int(cls_word_cnt) if cls_word_cnt else 0.000001
-            word_cnt_power *= int(word_cnt) if word_cnt else 0.000001
-        cls_cnt = self.storage.get("%s:%s" % (self.prefix, cls))
-        cls_cnt_power = (int(cls_cnt) if cls_cnt else 0.000001) ** (length - 1)
+        if cls_cnt == 0:
+            return 0
 
-        record_cnt = int(self.storage.get("%s:record" % self.prefix) or 0)
+        p_word_cls = [(float(cnt) / cls_cnt) for cnt in cls_word_cnts]
+        p_cls = 1
+        for p_word in p_word_cls:
+            p_cls *= p_word
 
-        return float(cls_word_cnt_power * (record_cnt ** (length - 1))) / (cls_cnt_power * word_cnt_power)
+
+        return p_cls
+
+
+def show(clses, words):
+    import redis
+    conn = redis.StrictRedis()
+    bayes = Bayes(conn)
+    print "".join(words)
+    for cls in clses:
+        print cls, ":",
+        print bayes.classify(cls, words)
+    print ""
 
 
 def test():
-    import redis
-
-    conn = redis.StrictRedis()
-
-    bayes = Bayes(conn)
-
     """
+    import redis
+    conn = redis.StrictRedis()
+    bayes = Bayes(conn)
     spam_corporas = [("A", "B"), ("B", "C")]
     normal_corporas = [("A", "C")]
-
     for corpora in spam_corporas:
         bayes.learn("spam", corpora)
 
@@ -52,10 +61,11 @@ def test():
         bayes.learn("normal", corpora)
     """
 
-    print bayes.classify("spam", ("A", "B", "C"))
-    print bayes.classify("spam", ("A", "B", "C", "D", "E", "F"))
-    print bayes.classify("normal", ("A", "B", "C"))
-    print bayes.classify("normal", ("A", "B", "C", "D", "E", "F"))
+    show(("spam", "normal", "unknown"), ("A", "B"))
+    show(("spam", "normal", "unknown"), ("B", "C"))
+    show(("spam", "normal", "unknown"), ("A", "C"))
+    show(("spam", "normal", "unknown"), ("A", "B", "C"))
+    show(("spam", "normal", "unknown"), ("A", "B", "C", "D", "E", "F"))
 
 
 if __name__ == "__main__":
